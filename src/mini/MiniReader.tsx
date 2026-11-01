@@ -17,6 +17,7 @@ import {
   type ChapterPayload,
 } from "../lib/api";
 import { splitParagraphs } from "../lib/format";
+import { persistProgress, readPosition } from "../lib/progress";
 import { setReaderState, useReaderState } from "../lib/reader";
 import {
   colorWithAlpha,
@@ -62,6 +63,12 @@ export function MiniReader() {
   const [error, setError] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const saveTimer = useRef<number | null>(null);
+  const progressRef = useRef<{ bookId: string | null; chapter: number; ratio: number }>({
+    bookId: null,
+    chapter: 0,
+    ratio: 0,
+  });
 
   useEffect(() => {
     let active = true;
@@ -127,9 +134,51 @@ export function MiniReader() {
   }, [bookId, chapterIndex]);
 
   useEffect(() => {
-    if (!chapter) return;
-    scrollRef.current?.scrollTo({ top: 0 });
-  }, [chapter]);
+    if (!chapter || !bookId) return;
+    const node = scrollRef.current;
+    if (!node) return;
+
+    const saved = readPosition(bookId);
+    const metaRatio =
+      detail?.meta.lastReadChapter === chapter.index ? detail.meta.lastReadProgress : 0;
+    const ratio = saved && saved.chapter === chapter.index ? saved.ratio : metaRatio;
+    const max = Math.max(0, node.scrollHeight - node.clientHeight);
+    node.scrollTop = ratio * max;
+
+    progressRef.current = { bookId, chapter: chapter.index, ratio };
+    persistProgress(bookId, chapter.index, ratio);
+  }, [chapter, bookId, detail]);
+
+  useEffect(() => {
+    const flush = () => {
+      const current = progressRef.current;
+      if (!current.bookId) return;
+      persistProgress(current.bookId, current.chapter, current.ratio);
+    };
+    const handleBeforeUnload = () => flush();
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      if (saveTimer.current !== null) {
+        window.clearTimeout(saveTimer.current);
+      }
+      flush();
+    };
+  }, []);
+
+  const handleScroll = () => {
+    if (!bookId || !chapter) return;
+    const node = scrollRef.current;
+    if (!node) return;
+    const max = node.scrollHeight - node.clientHeight;
+    const ratio = max > 0 ? Math.min(1, Math.max(0, node.scrollTop / max)) : 0;
+    progressRef.current = { bookId, chapter: chapter.index, ratio };
+    if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => {
+      persistProgress(bookId, chapter.index, ratio);
+    }, 450);
+  };
 
   const currentBook = books.find((item) => item.id === bookId) ?? detail?.meta;
   const titles = detail?.chapterTitles ?? [];
@@ -351,6 +400,7 @@ export function MiniReader() {
 
       <main
         ref={scrollRef}
+        onScroll={handleScroll}
         className="mini-scroll min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-2.5"
       >
         {!bookId ? (

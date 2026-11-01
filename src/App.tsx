@@ -7,6 +7,7 @@ import { ReaderPage } from "./pages/ReaderPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { api, errorMessage, type BookMeta } from "./lib/api";
 import { parseEpub } from "./lib/epub";
+import { clearPosition } from "./lib/progress";
 import { setReaderState, useReaderState } from "./lib/reader";
 import { useSettings } from "./lib/settings";
 
@@ -106,6 +107,7 @@ export default function App() {
     if (!window.confirm(`确定要把《${book.title}》从书库移除吗？`)) return;
     try {
       await api.deleteBook(book.id);
+      clearPosition(book.id);
       if (reader.bookId === book.id) {
         setReaderState({ bookId: null, chapterIndex: 0 });
       }

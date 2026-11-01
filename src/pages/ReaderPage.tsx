@@ -11,35 +11,9 @@ import {
 
 import { api, errorMessage, type BookDetail, type ChapterPayload } from "../lib/api";
 import { splitParagraphs } from "../lib/format";
+import { persistProgress, readPosition } from "../lib/progress";
 import { setReaderState, useReaderState } from "../lib/reader";
 import { useSettings, isEditableTarget, matchesShortcut } from "../lib/settings";
-
-const POSITION_PREFIX = "sidetale:position";
-
-interface SavedPosition {
-  chapter: number;
-  ratio: number;
-}
-
-function readPosition(bookId: string): SavedPosition | null {
-  try {
-    const raw = localStorage.getItem(`${POSITION_PREFIX}:${bookId}`);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<SavedPosition>;
-    if (!Number.isFinite(parsed.chapter) || !Number.isFinite(parsed.ratio)) return null;
-    return { chapter: Number(parsed.chapter), ratio: Math.min(1, Math.max(0, Number(parsed.ratio))) };
-  } catch {
-    return null;
-  }
-}
-
-function writePosition(bookId: string, position: SavedPosition): void {
-  try {
-    localStorage.setItem(`${POSITION_PREFIX}:${bookId}`, JSON.stringify(position));
-  } catch {
-    // 忽略存储失败
-  }
-}
 
 interface ReaderPageProps {
   onBack: () => void;
@@ -55,6 +29,11 @@ export function ReaderPage({ onBack, onOpenMini }: ReaderPageProps) {
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const saveTimer = useRef<number | null>(null);
+  const progressRef = useRef<{ bookId: string | null; chapter: number; ratio: number }>({
+    bookId: null,
+    chapter: 0,
+    ratio: 0,
+  });
 
   useEffect(() => {
     if (!bookId) {
@@ -109,17 +88,33 @@ export function ReaderPage({ onBack, onOpenMini }: ReaderPageProps) {
     if (!chapter || !bookId) return;
     const node = scrollRef.current;
     if (!node) return;
+
     const saved = readPosition(bookId);
-    const max = node.scrollHeight - node.clientHeight;
-    node.scrollTop =
-      saved && saved.chapter === chapter.index ? saved.ratio * Math.max(0, max) : 0;
-  }, [chapter, bookId]);
+    const metaRatio =
+      detail?.meta.lastReadChapter === chapter.index ? detail.meta.lastReadProgress : 0;
+    const ratio = saved && saved.chapter === chapter.index ? saved.ratio : metaRatio;
+    const max = Math.max(0, node.scrollHeight - node.clientHeight);
+    node.scrollTop = ratio * max;
+
+    progressRef.current = { bookId, chapter: chapter.index, ratio };
+    persistProgress(bookId, chapter.index, ratio);
+  }, [chapter, bookId, detail]);
 
   useEffect(() => {
+    const flush = () => {
+      const current = progressRef.current;
+      if (!current.bookId) return;
+      persistProgress(current.bookId, current.chapter, current.ratio);
+    };
+    const handleBeforeUnload = () => flush();
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
     return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
       if (saveTimer.current !== null) {
         window.clearTimeout(saveTimer.current);
       }
+      flush();
     };
   }, []);
 
@@ -164,11 +159,11 @@ export function ReaderPage({ onBack, onOpenMini }: ReaderPageProps) {
     if (!node) return;
     const max = node.scrollHeight - node.clientHeight;
     const ratio = max > 0 ? Math.min(1, Math.max(0, node.scrollTop / max)) : 0;
+    progressRef.current = { bookId, chapter: chapter.index, ratio };
     if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
-      writePosition(bookId, { chapter: chapter.index, ratio });
-      void api.saveReadProgress(bookId, chapter.index, ratio).catch(() => undefined);
-    }, 600);
+      persistProgress(bookId, chapter.index, ratio);
+    }, 400);
   };
 
   if (!bookId) {
