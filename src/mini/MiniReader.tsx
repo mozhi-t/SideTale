@@ -21,6 +21,8 @@ import { setReaderState, useReaderState } from "../lib/reader";
 import {
   colorWithAlpha,
   isDarkColor,
+  isEditableTarget,
+  matchesShortcut,
   updateSettings,
   useSettings,
   TEXT_COLOR_PRESETS,
@@ -132,6 +134,28 @@ export function MiniReader() {
   const currentBook = books.find((item) => item.id === bookId) ?? detail?.meta;
   const titles = detail?.chapterTitles ?? [];
   const total = chapter?.chapterCount ?? currentBook?.chapterCount ?? 0;
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (isEditableTarget(event.target)) return;
+
+      if (matchesShortcut(event, settings.prevChapterKey)) {
+        event.preventDefault();
+        if (chapterIndex > 0) setReaderState({ chapterIndex: chapterIndex - 1 });
+        return;
+      }
+
+      if (matchesShortcut(event, settings.nextChapterKey)) {
+        event.preventDefault();
+        if (total > 0 && chapterIndex < total - 1) {
+          setReaderState({ chapterIndex: chapterIndex + 1 });
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [chapterIndex, total, settings.prevChapterKey, settings.nextChapterKey]);
 
   const textColor = colorWithAlpha(settings.miniTextColor, settings.miniTextOpacity);
   const iconColor = colorWithAlpha(settings.miniTextColor, settings.miniTextOpacity * 0.55);

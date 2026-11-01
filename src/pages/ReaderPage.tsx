@@ -12,7 +12,7 @@ import {
 import { api, errorMessage, type BookDetail, type ChapterPayload } from "../lib/api";
 import { splitParagraphs } from "../lib/format";
 import { setReaderState, useReaderState } from "../lib/reader";
-import { useSettings } from "../lib/settings";
+import { useSettings, isEditableTarget, matchesShortcut } from "../lib/settings";
 
 const POSITION_PREFIX = "sidetale:position";
 
@@ -124,6 +124,34 @@ export function ReaderPage({ onBack, onOpenMini }: ReaderPageProps) {
   }, []);
 
   const total = chapter?.chapterCount ?? detail?.meta.chapterCount ?? 0;
+  const navRef = useRef({ chapterIndex, total });
+  navRef.current = { chapterIndex, total };
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (isEditableTarget(event.target)) return;
+
+      if (matchesShortcut(event, settings.prevChapterKey)) {
+        event.preventDefault();
+        const current = navRef.current;
+        if (current.chapterIndex > 0) {
+          setReaderState({ chapterIndex: current.chapterIndex - 1 });
+        }
+        return;
+      }
+
+      if (matchesShortcut(event, settings.nextChapterKey)) {
+        event.preventDefault();
+        const current = navRef.current;
+        if (current.total > 0 && current.chapterIndex < current.total - 1) {
+          setReaderState({ chapterIndex: current.chapterIndex + 1 });
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [settings.prevChapterKey, settings.nextChapterKey]);
 
   const goToChapter = (index: number) => {
     if (index < 0 || index >= total) return;

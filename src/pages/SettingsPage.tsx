@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Label, Slider, Switch } from "@heroui/react";
 import { ShieldCheck, Sparkles } from "lucide-react";
 
@@ -16,6 +17,71 @@ interface SliderRowProps {
   step: number;
   format: (value: number) => string;
   onChange: (value: number) => void;
+}
+
+function displayKeyName(key: string): string {
+  const labels: Record<string, string> = {
+    ArrowLeft: "←",
+    ArrowRight: "→",
+    ArrowUp: "↑",
+    ArrowDown: "↓",
+    " ": "空格",
+    Space: "空格",
+    Escape: "Esc",
+    Enter: "Enter",
+    Tab: "Tab",
+  };
+  return labels[key] ?? (key.length === 1 ? key.toUpperCase() : key);
+}
+
+function KeyCapture({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (key: string) => void;
+}) {
+  const [capturing, setCapturing] = useState(false);
+
+  useEffect(() => {
+    if (!capturing) return;
+
+    const handleKey = (event: KeyboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (event.key === "Escape") {
+        setCapturing(false);
+        return;
+      }
+      if (["Shift", "Control", "Alt", "Meta"].includes(event.key)) return;
+
+      onChange(event.key);
+      setCapturing(false);
+    };
+
+    window.addEventListener("keydown", handleKey, true);
+    return () => window.removeEventListener("keydown", handleKey, true);
+  }, [capturing, onChange]);
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-black/[0.08] bg-white/80 px-4 py-3">
+      <span className="text-[12.5px] text-[#4f4b43]">{label}</span>
+      <button
+        type="button"
+        onClick={() => setCapturing((previous) => !previous)}
+        className={`min-w-[68px] rounded-lg border px-3 py-1.5 text-[12px] tabular-nums transition-colors ${
+          capturing
+            ? "border-[#2b2a24] bg-[#2b2a24] text-white"
+            : "border-black/[0.1] bg-white text-[#2b2a24] hover:border-black/20"
+        }`}
+      >
+        {capturing ? "按下按键…" : displayKeyName(value)}
+      </button>
+    </div>
+  );
 }
 
 function SliderRow({ label, value, min, max, step, format, onChange }: SliderRowProps) {
@@ -80,9 +146,7 @@ export function SettingsPage({ privacyError }: SettingsPageProps) {
                     开启隐私保护（防截屏）
                   </span>
                   <span className="mt-2 block max-w-[430px] text-[12px] font-normal leading-relaxed text-[#8a867c]">
-                    开启后调用 Windows 的 SetWindowDisplayAffinity
-                    接口（WDA_EXCLUDEFROMCAPTURE），其他软件截屏或录屏时无法捕获 SideTale
-                    的任何窗口。需要 Windows 10 2004 及以上版本。
+                    开启后，其他软件的截屏与录屏无法捕获 SideTale 窗口。
                   </span>
                 </span>
                 <Switch.Control>
@@ -244,6 +308,26 @@ export function SettingsPage({ privacyError }: SettingsPageProps) {
                 step={0.05}
                 format={(value) => value.toFixed(2)}
                 onChange={(value) => updateSettings({ lineHeight: value })}
+              />
+            </div>
+          </section>
+
+          <section className="rounded-3xl border border-black/[0.06] bg-white/70 p-6">
+            <div className="text-[14px] font-medium text-[#2b2a24]">快捷键</div>
+            <p className="mt-2 text-[12px] leading-relaxed text-[#8a867c]">
+              在主窗口阅读页和小窗中生效，默认上一章 1、下一章 2。
+              点击按键后直接按下想使用的键即可修改。
+            </p>
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <KeyCapture
+                label="上一章"
+                value={settings.prevChapterKey}
+                onChange={(key) => updateSettings({ prevChapterKey: key })}
+              />
+              <KeyCapture
+                label="下一章"
+                value={settings.nextChapterKey}
+                onChange={(key) => updateSettings({ nextChapterKey: key })}
               />
             </div>
           </section>

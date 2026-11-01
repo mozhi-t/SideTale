@@ -17,6 +17,10 @@ export interface Settings {
   fontSize: number;
   /** 正文行高倍数 */
   lineHeight: number;
+  /** 上一章快捷键 */
+  prevChapterKey: string;
+  /** 下一章快捷键 */
+  nextChapterKey: string;
 }
 
 export const DEFAULT_TEXT_COLOR = "#eeede8";
@@ -37,6 +41,8 @@ export const DEFAULT_SETTINGS: Settings = {
   miniTextColor: DEFAULT_TEXT_COLOR,
   fontSize: 17,
   lineHeight: 1.9,
+  prevChapterKey: "1",
+  nextChapterKey: "2",
 };
 
 export function normalizeColor(value: unknown, fallback: string): string {
@@ -67,6 +73,26 @@ export function isDarkColor(hex: string): boolean {
   return luminance < 0.55;
 }
 
+function normalizeKey(value: unknown, fallback: string): string {
+  if (typeof value !== "string") return fallback;
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > 20) return fallback;
+  return trimmed;
+}
+
+/** 判断键盘事件是否匹配用户设置的快捷键 */
+export function matchesShortcut(event: KeyboardEvent, key: string): boolean {
+  if (event.ctrlKey || event.altKey || event.metaKey || event.repeat) return false;
+  return event.key.toLowerCase() === key.toLowerCase();
+}
+
+/** 判断事件是否来自可输入控件，避免输入文字时误触快捷键 */
+export function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable;
+}
+
 function clamp(value: number, min: number, max: number, fallback: number): number {
   return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
 }
@@ -85,6 +111,8 @@ function normalize(raw: Partial<Settings> | null | undefined): Settings {
     miniTextColor: normalizeColor(merged.miniTextColor, DEFAULT_SETTINGS.miniTextColor),
     fontSize: clamp(Number(merged.fontSize), 14, 24, DEFAULT_SETTINGS.fontSize),
     lineHeight: clamp(Number(merged.lineHeight), 1.4, 2.6, DEFAULT_SETTINGS.lineHeight),
+    prevChapterKey: normalizeKey(merged.prevChapterKey, DEFAULT_SETTINGS.prevChapterKey),
+    nextChapterKey: normalizeKey(merged.nextChapterKey, DEFAULT_SETTINGS.nextChapterKey),
   };
 }
 
