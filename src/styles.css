@@ -1,0 +1,162 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+
+@theme {
+  --font-sans:
+    "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  --font-serif:
+    "Source Han Serif SC", "Noto Serif SC", "Songti SC", "STSong", "SimSun", serif;
+}
+
+:root {
+  /* 用温暖的墨色替换 HeroUI 默认蓝色主色，贴合阅读器的纸墨气质 */
+  --accent: oklch(0.42 0.035 70);
+  --accent-foreground: oklch(0.99 0 0);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #f4f2ed;
+  color: #26251f;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+body.mini-body {
+  background: transparent;
+  overflow: hidden;
+}
+
+input,
+textarea {
+  user-select: text;
+}
+
+.thin-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.thin-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: rgba(38, 37, 31, 0.16);
+  border-radius: 999px;
+}
+
+.thin-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(38, 37, 31, 0.26);
+}
+
+.mini-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.mini-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.mini-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+}
+
+.mini-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* 小窗内的选择器需要更紧凑的高度，适配 400×340 的悬浮窗，
+   背景与边框随“背景透明度”一起淡出，文字颜色使用自定义色 */
+.mini-select .select__trigger {
+  height: 1.65rem;
+  min-height: 1.65rem;
+  padding-inline: 0.5rem;
+  font-size: 11px;
+  color: var(--mini-text-color, #eeede8);
+  background-color: var(--mini-chrome-bg, rgba(20, 21, 25, 0.5));
+  border: 1px solid var(--mini-chrome-border, rgba(255, 255, 255, 0.2));
+  box-shadow: none;
+  text-shadow: var(--mini-text-shadow, none);
+}
+
+.mini-select .select__trigger:hover,
+.mini-select .select__trigger[data-hovered="true"] {
+  background-color: var(--mini-chrome-hover, rgba(20, 21, 25, 0.6));
+}
+
+.mini-select .select__value {
+  font-size: 11px;
+  color: var(--mini-text-color, #eeede8);
+  text-shadow: var(--mini-text-shadow, none);
+}
+
+.mini-select .select__indicator {
+  width: 0.8rem;
+  height: 0.8rem;
+  color: var(--mini-text-color, #eeede8);
+  opacity: 0.6;
+  filter: var(--mini-icon-shadow, none);
+}
+
+/* 下拉菜单：底色与文字颜色相反明度，任何自定义文字颜色都能保证可读 */
+.mini-menu {
+  border-width: 1px;
+  border-style: solid;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.mini-menu .list-box,
+.mini-menu .list-box * {
+  color: var(--mini-text-color, #eeede8) !important;
+}
+
+/* 小窗顶部图标按钮同样跟随文字颜色，悬停底色随背景透明度淡出 */
+.mini-icon-btn {
+  color: var(--mini-icon-color, rgba(238, 237, 232, 0.55));
+  filter: var(--mini-icon-shadow, none);
+}
+
+.mini-icon-btn:hover {
+  color: var(--mini-text-color, #eeede8);
+  background-color: rgba(255, 255, 255, calc(0.1 * var(--mini-bg-opacity, 0.84)));
+}
+
+.mini-icon-btn--active {
+  color: var(--mini-text-color, #eeede8);
+  background-color: rgba(255, 255, 255, calc(0.18 * var(--mini-bg-opacity, 0.84)));
+}
+
+.mini-icon-btn:disabled:hover {
+  background-color: transparent;
+}
+
+/* 设置页的自定义文字颜色选择器 */
+input[type="color"].color-swatch {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 0.5rem;
+  background: transparent;
+  overflow: hidden;
+}
+
+input[type="color"].color-swatch::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+input[type="color"].color-swatch::-webkit-color-swatch {
+  border: none;
+  border-radius: 0;
+}
+
