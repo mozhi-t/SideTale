@@ -7,9 +7,9 @@ import { ReaderPage } from "./pages/ReaderPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { api, errorMessage, type BookMeta } from "./lib/api";
 import { parseEpub } from "./lib/epub";
-import { clearPosition } from "./lib/progress";
+import { clearPositions } from "./lib/progress";
 import { setReaderState, useReaderState } from "./lib/reader";
-import { useSettings } from "./lib/settings";
+import { isEditableTarget, matchesShortcut, useSettings } from "./lib/settings";
 
 function baseName(path: string): string {
   return path.split(/[\\/]/).pop() ?? path;
@@ -56,6 +56,26 @@ export default function App() {
       active = false;
     };
   }, [settings.privacyProtection]);
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (isEditableTarget(event.target)) return;
+
+      if (matchesShortcut(event, settings.showMiniKey)) {
+        event.preventDefault();
+        void api.showMiniWindow().catch((reason: unknown) => setError(errorMessage(reason)));
+        return;
+      }
+
+      if (matchesShortcut(event, settings.hideMiniKey)) {
+        event.preventDefault();
+        void api.hideMiniWindow().catch((reason: unknown) => setError(errorMessage(reason)));
+      }
+    };
+
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [settings.showMiniKey, settings.hideMiniKey]);
 
   const handleImport = async () => {
     setImporting(true);
@@ -107,7 +127,7 @@ export default function App() {
     if (!window.confirm(`确定要把《${book.title}》从书库移除吗？`)) return;
     try {
       await api.deleteBook(book.id);
-      clearPosition(book.id);
+      clearPositions(book.id);
       if (reader.bookId === book.id) {
         setReaderState({ bookId: null, chapterIndex: 0 });
       }

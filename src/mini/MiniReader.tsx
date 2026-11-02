@@ -17,7 +17,7 @@ import {
   type ChapterPayload,
 } from "../lib/api";
 import { splitParagraphs } from "../lib/format";
-import { persistProgress, readPosition } from "../lib/progress";
+import { listenPosition, persistChapterRatio, readChapterRatio } from "../lib/progress";
 import { setReaderState, useReaderState } from "../lib/reader";
 import {
   colorWithAlpha,
@@ -64,6 +64,7 @@ export function MiniReader() {
   const [panelOpen, setPanelOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const saveTimer = useRef<number | null>(null);
+  const restoredKey = useRef<string | null>(null);
   const progressRef = useRef<{ bookId: string | null; chapter: number; ratio: number }>({
     bookId: null,
     chapter: 0,
@@ -113,6 +114,12 @@ export function MiniReader() {
       setChapter(null);
       return;
     }
+    // 切换章节或书籍前先把当前进度落盘，避免滚动防抖中被覆盖
+    const pending = progressRef.current;
+    if (pending.bookId && (pending.bookId !== bookId || pending.chapter !== chapterIndex)) {
+      persistChapterRatio(pending.bookId, pending.chapter, pending.ratio);
+    }
+
     let active = true;
     api
       .getChapter(bookId, chapterIndex)
@@ -138,22 +145,53 @@ export function MiniReader() {
     const node = scrollRef.current;
     if (!node) return;
 
-    const saved = readPosition(bookId);
+    const key = `${bookId}:${chapter.index}`;
+    if (restoredKey.current === key) return;
+    restoredKey.current = key;
+
+    const saved = readChapterRatio(bookId, chapter.index);
     const metaRatio =
       detail?.meta.lastReadChapter === chapter.index ? detail.meta.lastReadProgress : 0;
-    const ratio = saved && saved.chapter === chapter.index ? saved.ratio : metaRatio;
+    const ratio = saved ?? metaRatio;
     const max = Math.max(0, node.scrollHeight - node.clientHeight);
-    node.scrollTop = ratio * max;
-
     progressRef.current = { bookId, chapter: chapter.index, ratio };
-    persistProgress(bookId, chapter.index, ratio);
+    node.scrollTop = ratio * max;
+    persistChapterRatio(bookId, chapter.index, ratio, { broadcast: false });
   }, [chapter, bookId, detail]);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+
+    void listenPosition((position) => {
+      if (position.bookId !== bookId || position.chapter !== chapterIndex) return;
+      const node = scrollRef.current;
+      if (!node) return;
+      const max = Math.max(0, node.scrollHeight - node.clientHeight);
+      progressRef.current = {
+        bookId: position.bookId,
+        chapter: position.chapter,
+        ratio: position.ratio,
+      };
+      node.scrollTop = position.ratio * max;
+    })
+      .then((fn) => {
+        if (disposed) fn();
+        else unlisten = fn;
+      })
+      .catch(() => undefined);
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [bookId, chapterIndex]);
 
   useEffect(() => {
     const flush = () => {
       const current = progressRef.current;
       if (!current.bookId) return;
-      persistProgress(current.bookId, current.chapter, current.ratio);
+      persistChapterRatio(current.bookId, current.chapter, current.ratio);
     };
     const handleBeforeUnload = () => flush();
 
@@ -173,10 +211,18 @@ export function MiniReader() {
     if (!node) return;
     const max = node.scrollHeight - node.clientHeight;
     const ratio = max > 0 ? Math.min(1, Math.max(0, node.scrollTop / max)) : 0;
+    const current = progressRef.current;
+    if (
+      current.bookId === bookId &&
+      current.chapter === chapter.index &&
+      Math.abs(current.ratio - ratio) < 0.002
+    ) {
+      return;
+    }
     progressRef.current = { bookId, chapter: chapter.index, ratio };
     if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
-      persistProgress(bookId, chapter.index, ratio);
+      persistChapterRatio(bookId, chapter.index, ratio);
     }, 450);
   };
 
@@ -199,12 +245,24 @@ export function MiniReader() {
         if (total > 0 && chapterIndex < total - 1) {
           setReaderState({ chapterIndex: chapterIndex + 1 });
         }
+        return;
+      }
+
+      if (matchesShortcut(event, settings.showMiniKey)) {
+        event.preventDefault();
+        void api.showMiniWindow().catch(() => undefined);
+        return;
+      }
+
+      if (matchesShortcut(event, settings.hideMiniKey)) {
+        event.preventDefault();
+        void api.hideMiniWindow().catch(() => undefined);
       }
     };
 
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [chapterIndex, total, settings.prevChapterKey, settings.nextChapterKey]);
+  }, [chapterIndex, total, settings.prevChapterKey, settings.nextChapterKey, settings.showMiniKey, settings.hideMiniKey]);
 
   const textColor = colorWithAlpha(settings.miniTextColor, settings.miniTextOpacity);
   const iconColor = colorWithAlpha(settings.miniTextColor, settings.miniTextOpacity * 0.55);

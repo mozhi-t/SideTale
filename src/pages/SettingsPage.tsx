@@ -315,7 +315,7 @@ export function SettingsPage({ privacyError }: SettingsPageProps) {
           <section className="rounded-3xl border border-black/[0.06] bg-white/70 p-6">
             <div className="text-[14px] font-medium text-[#2b2a24]">快捷键</div>
             <p className="mt-2 text-[12px] leading-relaxed text-[#8a867c]">
-              在主窗口阅读页和小窗中生效，默认上一章 1、下一章 2。
+              在主窗口阅读页和小窗中生效，默认上一章 1、下一章 2、显示小窗 3、隐藏小窗 4。
               点击按键后直接按下想使用的键即可修改。
             </p>
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -328,6 +328,16 @@ export function SettingsPage({ privacyError }: SettingsPageProps) {
                 label="下一章"
                 value={settings.nextChapterKey}
                 onChange={(key) => updateSettings({ nextChapterKey: key })}
+              />
+              <KeyCapture
+                label="显示小窗"
+                value={settings.showMiniKey}
+                onChange={(key) => updateSettings({ showMiniKey: key })}
+              />
+              <KeyCapture
+                label="隐藏小窗"
+                value={settings.hideMiniKey}
+                onChange={(key) => updateSettings({ hideMiniKey: key })}
               />
             </div>
           </section>

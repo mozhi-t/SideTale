@@ -21,6 +21,10 @@ export interface Settings {
   prevChapterKey: string;
   /** 下一章快捷键 */
   nextChapterKey: string;
+  /** 显示小窗快捷键 */
+  showMiniKey: string;
+  /** 隐藏小窗快捷键 */
+  hideMiniKey: string;
 }
 
 export const DEFAULT_TEXT_COLOR = "#eeede8";
@@ -43,6 +47,8 @@ export const DEFAULT_SETTINGS: Settings = {
   lineHeight: 1.9,
   prevChapterKey: "1",
   nextChapterKey: "2",
+  showMiniKey: "3",
+  hideMiniKey: "4",
 };
 
 export function normalizeColor(value: unknown, fallback: string): string {
@@ -113,6 +119,8 @@ function normalize(raw: Partial<Settings> | null | undefined): Settings {
     lineHeight: clamp(Number(merged.lineHeight), 1.4, 2.6, DEFAULT_SETTINGS.lineHeight),
     prevChapterKey: normalizeKey(merged.prevChapterKey, DEFAULT_SETTINGS.prevChapterKey),
     nextChapterKey: normalizeKey(merged.nextChapterKey, DEFAULT_SETTINGS.nextChapterKey),
+    showMiniKey: normalizeKey(merged.showMiniKey, DEFAULT_SETTINGS.showMiniKey),
+    hideMiniKey: normalizeKey(merged.hideMiniKey, DEFAULT_SETTINGS.hideMiniKey),
   };
 }
 

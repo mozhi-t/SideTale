@@ -6,6 +6,34 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, State, WindowEvent};
 
+/// 关闭 Windows 的窗口显示/隐藏过渡动画，让快捷键切换小窗时立即出现或消失
+#[cfg(target_os = "windows")]
+fn disable_window_transitions(window: &tauri::WebviewWindow) {
+    // DWMWA_TRANSITIONS_FORCEDISABLED = 3
+    #[link(name = "dwmapi")]
+    extern "system" {
+        fn DwmSetWindowAttribute(
+            hwnd: *mut core::ffi::c_void,
+            attribute: u32,
+            value: *const core::ffi::c_void,
+            size: u32,
+        ) -> i32;
+    }
+
+    let Ok(hwnd) = window.hwnd() else {
+        return;
+    };
+    let disabled: i32 = 1;
+    unsafe {
+        let _ = DwmSetWindowAttribute(
+            hwnd.0,
+            3,
+            &disabled as *const i32 as *const core::ffi::c_void,
+            std::mem::size_of::<i32>() as u32,
+        );
+    }
+}
+
 #[tauri::command]
 fn list_books(store: State<'_, Store>) -> Result<Vec<BookMeta>, String> {
     store.list_books()
@@ -198,6 +226,15 @@ pub fn run() {
             let root = app.path().app_data_dir()?;
             let store = Store::new(root).map_err(std::io::Error::other)?;
             app.manage(store);
+
+            // 关闭主窗口与小窗的系统显示/隐藏动画
+            #[cfg(target_os = "windows")]
+            for label in ["main", "mini"] {
+                if let Some(window) = app.get_webview_window(label) {
+                    disable_window_transitions(&window);
+                }
+            }
+
             setup_tray(app)?;
 
             // 托盘图标注册到系统后，再把它固定到任务栏通知区域
