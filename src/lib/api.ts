@@ -50,6 +50,8 @@ export const api = {
     invoke<void>("set_privacy_protection", { enabled }),
   showMiniWindow: () => invoke<void>("show_mini_window"),
   hideMiniWindow: () => invoke<void>("hide_mini_window"),
+  setMiniHotkeys: (show: string, hide: string) =>
+    invoke<void>("set_mini_hotkeys", { show, hide }),
 };
 
 export function errorMessage(error: unknown): string {

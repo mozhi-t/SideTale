@@ -5,6 +5,8 @@ import { ShieldCheck, Sparkles } from "lucide-react";
 import {
   TEXT_COLOR_PRESETS,
   colorWithAlpha,
+  formatShortcut,
+  shortcutFromEvent,
   updateSettings,
   useSettings,
 } from "../lib/settings";
@@ -17,21 +19,6 @@ interface SliderRowProps {
   step: number;
   format: (value: number) => string;
   onChange: (value: number) => void;
-}
-
-function displayKeyName(key: string): string {
-  const labels: Record<string, string> = {
-    ArrowLeft: "←",
-    ArrowRight: "→",
-    ArrowUp: "↑",
-    ArrowDown: "↓",
-    " ": "空格",
-    Space: "空格",
-    Escape: "Esc",
-    Enter: "Enter",
-    Tab: "Tab",
-  };
-  return labels[key] ?? (key.length === 1 ? key.toUpperCase() : key);
 }
 
 function KeyCapture({
@@ -52,13 +39,15 @@ function KeyCapture({
       event.preventDefault();
       event.stopPropagation();
 
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !event.ctrlKey && !event.shiftKey && !event.altKey) {
         setCapturing(false);
         return;
       }
-      if (["Shift", "Control", "Alt", "Meta"].includes(event.key)) return;
 
-      onChange(event.key);
+      const shortcut = shortcutFromEvent(event);
+      if (!shortcut) return;
+
+      onChange(shortcut);
       setCapturing(false);
     };
 
@@ -78,7 +67,7 @@ function KeyCapture({
             : "border-black/[0.1] bg-white text-[#2b2a24] hover:border-black/20"
         }`}
       >
-        {capturing ? "按下按键…" : displayKeyName(value)}
+        {capturing ? "按下按键…" : formatShortcut(value)}
       </button>
     </div>
   );
@@ -315,8 +304,9 @@ export function SettingsPage({ privacyError }: SettingsPageProps) {
           <section className="rounded-3xl border border-black/[0.06] bg-white/70 p-6">
             <div className="text-[14px] font-medium text-[#2b2a24]">快捷键</div>
             <p className="mt-2 text-[12px] leading-relaxed text-[#8a867c]">
-              在主窗口阅读页和小窗中生效，默认上一章 1、下一章 2、显示小窗 3、隐藏小窗 4。
-              点击按键后直接按下想使用的键即可修改。
+              上一章 / 下一章在主窗口阅读页和小窗中生效；显示 / 隐藏小窗为全局热键，任何程序下都能使用。
+              默认上一章 1、下一章 2、显示小窗 Ctrl+Shift+3、隐藏小窗 Ctrl+Shift+4。
+              点击按键后按下想使用的组合键即可修改。
             </p>
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <KeyCapture

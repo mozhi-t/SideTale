@@ -2,9 +2,11 @@ mod books;
 mod privacy;
 
 use books::{BookDetail, BookMeta, ChapterPayload, NewBook, Store};
+use std::sync::Mutex;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, State, WindowEvent};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 /// 关闭 Windows 的窗口显示/隐藏过渡动画，让快捷键切换小窗时立即出现或消失
 #[cfg(target_os = "windows")]
@@ -218,14 +220,199 @@ fn hide_mini_window(app: AppHandle) -> Result<(), String> {
     window.hide().map_err(|error| error.to_string())
 }
 
+/// 当前注册的显示 / 隐藏小窗全局热键
+#[derive(Default)]
+struct MiniHotkeys(Mutex<(Option<Shortcut>, Option<Shortcut>)>);
+
+fn parse_code(token: &str) -> Option<Code> {
+    let lower = token.to_ascii_lowercase();
+    if lower.len() == 1 {
+        return match lower.chars().next()? {
+            '0' => Some(Code::Digit0),
+            '1' => Some(Code::Digit1),
+            '2' => Some(Code::Digit2),
+            '3' => Some(Code::Digit3),
+            '4' => Some(Code::Digit4),
+            '5' => Some(Code::Digit5),
+            '6' => Some(Code::Digit6),
+            '7' => Some(Code::Digit7),
+            '8' => Some(Code::Digit8),
+            '9' => Some(Code::Digit9),
+            'a' => Some(Code::KeyA),
+            'b' => Some(Code::KeyB),
+            'c' => Some(Code::KeyC),
+            'd' => Some(Code::KeyD),
+            'e' => Some(Code::KeyE),
+            'f' => Some(Code::KeyF),
+            'g' => Some(Code::KeyG),
+            'h' => Some(Code::KeyH),
+            'i' => Some(Code::KeyI),
+            'j' => Some(Code::KeyJ),
+            'k' => Some(Code::KeyK),
+            'l' => Some(Code::KeyL),
+            'm' => Some(Code::KeyM),
+            'n' => Some(Code::KeyN),
+            'o' => Some(Code::KeyO),
+            'p' => Some(Code::KeyP),
+            'q' => Some(Code::KeyQ),
+            'r' => Some(Code::KeyR),
+            's' => Some(Code::KeyS),
+            't' => Some(Code::KeyT),
+            'u' => Some(Code::KeyU),
+            'v' => Some(Code::KeyV),
+            'w' => Some(Code::KeyW),
+            'x' => Some(Code::KeyX),
+            'y' => Some(Code::KeyY),
+            'z' => Some(Code::KeyZ),
+            _ => None,
+        };
+    }
+
+    Some(match lower.as_str() {
+        "f1" => Code::F1,
+        "f2" => Code::F2,
+        "f3" => Code::F3,
+        "f4" => Code::F4,
+        "f5" => Code::F5,
+        "f6" => Code::F6,
+        "f7" => Code::F7,
+        "f8" => Code::F8,
+        "f9" => Code::F9,
+        "f10" => Code::F10,
+        "f11" => Code::F11,
+        "f12" => Code::F12,
+        "space" => Code::Space,
+        "arrowleft" => Code::ArrowLeft,
+        "arrowright" => Code::ArrowRight,
+        "arrowup" => Code::ArrowUp,
+        "arrowdown" => Code::ArrowDown,
+        "escape" | "esc" => Code::Escape,
+        "enter" | "return" => Code::Enter,
+        "tab" => Code::Tab,
+        "backspace" => Code::Backspace,
+        "delete" => Code::Delete,
+        "home" => Code::Home,
+        "end" => Code::End,
+        "pageup" => Code::PageUp,
+        "pagedown" => Code::PageDown,
+        _ => return None,
+    })
+}
+
+fn parse_shortcut(value: &str) -> Result<Shortcut, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err("快捷键不能为空".to_string());
+    }
+
+    let tokens: Vec<&str> = if trimmed == " " {
+        vec!["Space"]
+    } else {
+        trimmed.split('+').map(str::trim).filter(|token| !token.is_empty()).collect()
+    };
+
+    let mut modifiers = Modifiers::empty();
+    let mut code: Option<Code> = None;
+    for token in tokens {
+        match token.to_ascii_lowercase().as_str() {
+            "ctrl" | "control" => modifiers |= Modifiers::CONTROL,
+            "shift" => modifiers |= Modifiers::SHIFT,
+            "alt" | "option" => modifiers |= Modifiers::ALT,
+            "meta" | "super" | "cmd" | "win" => modifiers |= Modifiers::SUPER,
+            _ => {
+                if code.is_some() {
+                    return Err(format!("快捷键只能包含一个按键：{value}"));
+                }
+                code = Some(parse_code(token).ok_or_else(|| format!("不支持的快捷键按键：{token}"))?);
+            }
+        }
+    }
+
+    let code = code.ok_or_else(|| format!("快捷键缺少按键：{value}"))?;
+    let modifiers = (!modifiers.is_empty()).then_some(modifiers);
+    Ok(Shortcut::new(modifiers, code))
+}
+
+/// 同步显示 / 隐藏小窗的全局热键，窗口失去焦点后依然可用
+#[tauri::command]
+fn set_mini_hotkeys(show: String, hide: String, app: AppHandle) -> Result<(), String> {
+    let show_shortcut = parse_shortcut(&show).map_err(|error| format!("显示小窗{error}"))?;
+    let hide_shortcut = parse_shortcut(&hide).map_err(|error| format!("隐藏小窗{error}"))?;
+    if show_shortcut == hide_shortcut {
+        return Err("显示与隐藏小窗的快捷键不能相同".to_string());
+    }
+
+    let state = app.state::<MiniHotkeys>();
+    // 整个替换过程持有锁，避免多个前端请求并发时重复注册同一热键
+    let mut current = state.0.lock().map_err(|_| "快捷键状态异常".to_string())?;
+    let previous = current.clone();
+    for shortcut in [current.0.take(), current.1.take()].into_iter().flatten() {
+        let _ = app.global_shortcut().unregister(shortcut);
+    }
+
+    let registered = (|| -> Result<(), String> {
+        app.global_shortcut()
+            .register(show_shortcut)
+            .map_err(|error| format!("注册显示小窗快捷键失败：{error}"))?;
+        app.global_shortcut().register(hide_shortcut).map_err(|error| {
+            let _ = app.global_shortcut().unregister(show_shortcut);
+            format!("注册隐藏小窗快捷键失败：{error}")
+        })
+    })();
+
+    match registered {
+        Ok(()) => {
+            current.0 = Some(show_shortcut);
+            current.1 = Some(hide_shortcut);
+            Ok(())
+        }
+        Err(error) => {
+            // 注册失败时恢复之前的快捷键，避免用户原来的快捷键也失效
+            if let Some(old_show) = previous.0 {
+                let _ = app.global_shortcut().register(old_show);
+                current.0 = Some(old_show);
+            }
+            if let Some(old_hide) = previous.1 {
+                let _ = app.global_shortcut().register(old_hide);
+                current.1 = Some(old_hide);
+            }
+            Err(error)
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    if event.state != ShortcutState::Pressed {
+                        return;
+                    }
+                    let (show, hide) = {
+                        let state = app.state::<MiniHotkeys>();
+                        let Ok(current) = state.0.lock() else {
+                            return;
+                        };
+                        (current.0.clone(), current.1.clone())
+                    };
+                    if show.as_ref() == Some(shortcut) {
+                        let _ = show_mini(app);
+                    } else if hide.as_ref() == Some(shortcut) {
+                        if let Some(window) = app.get_webview_window("mini") {
+                            let _ = window.hide();
+                        }
+                    }
+                })
+                .build(),
+        )
         .setup(|app| {
             let root = app.path().app_data_dir()?;
             let store = Store::new(root).map_err(std::io::Error::other)?;
             app.manage(store);
+            app.manage(MiniHotkeys::default());
 
             // 关闭主窗口与小窗的系统显示/隐藏动画
             #[cfg(target_os = "windows")]
@@ -268,7 +455,8 @@ pub fn run() {
             read_file_base64,
             set_privacy_protection,
             show_mini_window,
-            hide_mini_window
+            hide_mini_window,
+            set_mini_hotkeys
         ])
         .run(tauri::generate_context!())
         .expect("error while running SideTale");

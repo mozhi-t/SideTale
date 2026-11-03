@@ -58,6 +58,12 @@ export default function App() {
   }, [settings.privacyProtection]);
 
   useEffect(() => {
+    void api
+      .setMiniHotkeys(settings.showMiniKey, settings.hideMiniKey)
+      .catch((reason: unknown) => setError(errorMessage(reason)));
+  }, [settings.showMiniKey, settings.hideMiniKey]);
+
+  useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       if (isEditableTarget(event.target)) return;
 

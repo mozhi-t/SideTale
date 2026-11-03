@@ -47,8 +47,8 @@ export const DEFAULT_SETTINGS: Settings = {
   lineHeight: 1.9,
   prevChapterKey: "1",
   nextChapterKey: "2",
-  showMiniKey: "3",
-  hideMiniKey: "4",
+  showMiniKey: "Ctrl+Shift+3",
+  hideMiniKey: "Ctrl+Shift+4",
 };
 
 export function normalizeColor(value: unknown, fallback: string): string {
@@ -82,14 +82,126 @@ export function isDarkColor(hex: string): boolean {
 function normalizeKey(value: unknown, fallback: string): string {
   if (typeof value !== "string") return fallback;
   const trimmed = value.trim();
-  if (trimmed.length === 0 || trimmed.length > 20) return fallback;
+  if (trimmed.length === 0 || trimmed.length > 48) return fallback;
   return trimmed;
 }
 
+interface ParsedShortcut {
+  ctrl: boolean;
+  shift: boolean;
+  alt: boolean;
+  meta: boolean;
+  key: string;
+}
+
+/** 按键名统一成字符串中保存的形式：字母小写、数字直接用字符 */
+function eventKeyToken(event: KeyboardEvent): string {
+  const code = event.code;
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3).toLowerCase();
+  if (/^Digit[0-9]$/.test(code)) return code.slice(5);
+  if (/^(F[1-9]|F1[0-2])$/.test(code)) return code;
+  if (code === "Space") return "Space";
+  if (
+    /^(ArrowLeft|ArrowRight|ArrowUp|ArrowDown|Escape|Enter|Tab|Backspace|Delete|Home|End|PageUp|PageDown)$/.test(
+      code,
+    )
+  ) {
+    return code;
+  }
+  return event.key.length === 1 ? event.key.toLowerCase() : event.key;
+}
+
+function parseShortcut(shortcut: string): ParsedShortcut {
+  const parsed: ParsedShortcut = { ctrl: false, shift: false, alt: false, meta: false, key: "" };
+  const tokens = shortcut === " " ? ["Space"] : shortcut.split("+");
+  for (const token of tokens) {
+    const trimmed = token.trim();
+    if (!trimmed) continue;
+    switch (trimmed.toLowerCase()) {
+      case "ctrl":
+      case "control":
+        parsed.ctrl = true;
+        break;
+      case "shift":
+        parsed.shift = true;
+        break;
+      case "alt":
+      case "option":
+        parsed.alt = true;
+        break;
+      case "meta":
+      case "cmd":
+      case "super":
+      case "win":
+        parsed.meta = true;
+        break;
+      default:
+        parsed.key = trimmed;
+    }
+  }
+  return parsed;
+}
+
+/** 把键盘事件转换成可保存的组合键字符串，例如 Ctrl+Shift+3 */
+export function shortcutFromEvent(event: KeyboardEvent): string | null {
+  const modifierKeys = ["Shift", "Control", "Alt", "Meta"];
+  if (modifierKeys.includes(event.key)) return null;
+
+  const tokens: string[] = [];
+  if (event.ctrlKey) tokens.push("Ctrl");
+  if (event.shiftKey) tokens.push("Shift");
+  if (event.altKey) tokens.push("Alt");
+  if (event.metaKey) tokens.push("Win");
+  tokens.push(eventKeyToken(event));
+  return tokens.join("+");
+}
+
 /** 判断键盘事件是否匹配用户设置的快捷键 */
-export function matchesShortcut(event: KeyboardEvent, key: string): boolean {
-  if (event.ctrlKey || event.altKey || event.metaKey || event.repeat) return false;
-  return event.key.toLowerCase() === key.toLowerCase();
+export function matchesShortcut(event: KeyboardEvent, shortcut: string): boolean {
+  if (event.repeat) return false;
+  const parsed = parseShortcut(shortcut);
+  if (!parsed.key) return false;
+  if (event.ctrlKey !== parsed.ctrl) return false;
+  if (event.shiftKey !== parsed.shift) return false;
+  if (event.altKey !== parsed.alt) return false;
+  if (event.metaKey !== parsed.meta) return false;
+  return eventKeyToken(event).toLowerCase() === parsed.key.toLowerCase();
+}
+
+/** 快捷键展示文本，例如 Ctrl + Shift + 3 */
+export function formatShortcut(shortcut: string): string {
+  const labels: Record<string, string> = {
+    ArrowLeft: "←",
+    ArrowRight: "→",
+    ArrowUp: "↑",
+    ArrowDown: "↓",
+    Space: "空格",
+    Escape: "Esc",
+    Enter: "Enter",
+    Tab: "Tab",
+    Backspace: "Backspace",
+    Delete: "Delete",
+    Home: "Home",
+    End: "End",
+    PageUp: "PgUp",
+    PageDown: "PgDn",
+  };
+  const tokens = shortcut === " " ? ["Space"] : shortcut.split("+");
+  return tokens
+    .map((token) => {
+      const trimmed = token.trim();
+      if (!trimmed) return "";
+      const modifier = trimmed.toLowerCase();
+      if (modifier === "ctrl" || modifier === "control") return "Ctrl";
+      if (modifier === "shift") return "Shift";
+      if (modifier === "alt" || modifier === "option") return "Alt";
+      if (modifier === "meta" || modifier === "cmd" || modifier === "super" || modifier === "win") {
+        return "Win";
+      }
+      return labels[trimmed] ?? (trimmed.length === 1 ? trimmed.toUpperCase() : trimmed);
+    })
+    .filter(Boolean)
+    .join(" + ");
 }
 
 /** 判断事件是否来自可输入控件，避免输入文字时误触快捷键 */
@@ -105,6 +217,8 @@ function clamp(value: number, min: number, max: number, fallback: number): numbe
 
 function normalize(raw: Partial<Settings> | null | undefined): Settings {
   const merged = { ...DEFAULT_SETTINGS, ...(raw ?? {}) };
+  const showMiniKey = normalizeKey(merged.showMiniKey, DEFAULT_SETTINGS.showMiniKey);
+  const hideMiniKey = normalizeKey(merged.hideMiniKey, DEFAULT_SETTINGS.hideMiniKey);
   return {
     privacyProtection: Boolean(merged.privacyProtection),
     miniBgOpacity: clamp(Number(merged.miniBgOpacity), 0, 1, DEFAULT_SETTINGS.miniBgOpacity),
@@ -119,8 +233,9 @@ function normalize(raw: Partial<Settings> | null | undefined): Settings {
     lineHeight: clamp(Number(merged.lineHeight), 1.4, 2.6, DEFAULT_SETTINGS.lineHeight),
     prevChapterKey: normalizeKey(merged.prevChapterKey, DEFAULT_SETTINGS.prevChapterKey),
     nextChapterKey: normalizeKey(merged.nextChapterKey, DEFAULT_SETTINGS.nextChapterKey),
-    showMiniKey: normalizeKey(merged.showMiniKey, DEFAULT_SETTINGS.showMiniKey),
-    hideMiniKey: normalizeKey(merged.hideMiniKey, DEFAULT_SETTINGS.hideMiniKey),
+    // 旧版本默认的单键 3/4 注册为全局热键会拦截其它软件的输入，升级为组合键
+    showMiniKey: showMiniKey === "3" ? DEFAULT_SETTINGS.showMiniKey : showMiniKey,
+    hideMiniKey: hideMiniKey === "4" ? DEFAULT_SETTINGS.hideMiniKey : hideMiniKey,
   };
 }
 
